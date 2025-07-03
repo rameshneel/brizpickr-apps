@@ -4,18 +4,7 @@ A modern, scalable monorepo for BrizPickr company applications built with NX, Re
 
 ## 🎯 Quick Start
 
-### For Junior Developers
-
-```bash
-# Option 1: Use the quick start script (Windows)
-quick-start.bat
-
-# Option 2: Manual setup
-npm run setup
-npm start
-```
-
-### For Senior Developers
+### For Developers
 
 ```bash
 # Install dependencies
