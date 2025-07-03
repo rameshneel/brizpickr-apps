@@ -1,0 +1,29 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "rootDir": ".",
+    "sourceMap": true,
+    "declaration": false,
+    "moduleResolution": "node",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "es2015",
+    "module": "esnext",
+    "lib": ["es2020", "dom"],
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@brizpickr/ui-kit": ["libs/ui-kit/src/index.js"],
+      "@brizpickr/shared-store": ["libs/shared-store/src/index.js"],
+      "@brizpickr/api-client": ["libs/api-client/src/index.js"],
+      "@brizpickr/shared-hooks": ["libs/shared-hooks/src/index.js"],
+      "@brizpickr/shared-utils": ["libs/shared-utils/src/index.js"],
+      "@brizpickr/shared-types": ["libs/shared-types/src/index.js"],
+      "@brizpickr/shared-error-boundary": ["libs/shared-error-boundary/src/index.js"]
+    }
+  },
+  "exclude": ["node_modules", "tmp"]
+} 
+

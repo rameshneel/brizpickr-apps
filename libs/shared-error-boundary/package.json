@@ -1,0 +1,31 @@
+{
+  "name": "@brizpickr/shared-error-boundary",
+  "version": "1.0.0",
+  "description": "Shared error boundary and error handling utilities for BrizPickr applications",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "echo 'No build step required for JS library'",
+    "test": "echo 'No tests specified'",
+    "lint": "eslint src/**/*.js"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "dependencies": {
+    "lucide-react": "^0.263.1"
+  },
+  "devDependencies": {
+    "eslint": "^8.0.0"
+  },
+  "keywords": [
+    "error-boundary",
+    "error-handling",
+    "react",
+    "monorepo",
+    "shared-library"
+  ],
+  "author": "BrizPickr Team",
+  "license": "MIT"
+} 
