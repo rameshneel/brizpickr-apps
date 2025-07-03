@@ -221,4 +221,4 @@ This project is proprietary to BrizPickr company.
 
 **Happy Coding! 🎉**
 
-For questions or issues, refer to the [Junior Developer Setup Guide](./JUNIOR_DEVELOPER_SETUP_GUIDE.md) or ask your senior developer.
+For questions or issues, refer to the [ Developer Setup Guide](./DEVELOPER_SETUP_GUIDE.md) or ask your senior developer.
