@@ -1,6 +1,23 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Input, Badge } from '@brizpickr/ui-kit';
+import {
+  Button,
+  Input,
+  Badge,
+  Select,
+  Modal,
+  Alert,
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationPrevious,
+  PaginationNext,
+  PaginationEllipsis,
+  usePagination,
+  SwitchWithLabel,
+  SwitchGroup,
+} from '@brizpickr/ui-kit';
 
 // Dummy data fetcher (simulate API)
 const fetchProjects = async () => {
@@ -63,6 +80,8 @@ const statusMap = {
 export default function ProjectsDashboard() {
   const [tab, setTab] = useState('submitted');
   const [search, setSearch] = useState('');
+  const [showDrafts, setShowDrafts] = useState(false);
+  const [showSubmitted, setShowSubmitted] = useState(false);
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['projects'],
     queryFn: fetchProjects,
@@ -86,6 +105,7 @@ export default function ProjectsDashboard() {
         </div>
         <Button>+ New Requirement</Button>
       </div>
+
       <div className="flex items-center gap-2 mb-4">
         <Button
           variant={tab === 'submitted' ? 'default' : 'outline'}
@@ -146,6 +166,31 @@ export default function ProjectsDashboard() {
               <Button className="mt-4 w-full">View Project</Button>
             </div>
           ))}
+          <div className="flex items-center gap-2 mb-4">
+            <Select
+              options={[
+                { label: 'All', value: 'all' },
+                { label: 'Submitted', value: 'submitted' },
+                { label: 'Draft', value: 'draft' },
+              ]}
+              value={tab}
+              onChange={setTab}
+            />
+            <SwitchGroup orientation="horizontal">
+              <SwitchWithLabel
+                id="show-drafts"
+                label="Show Drafts"
+                checked={showDrafts}
+                onCheckedChange={setShowDrafts}
+              />
+              <SwitchWithLabel
+                id="show-submitted"
+                label="Show Submitted"
+                checked={showSubmitted}
+                onCheckedChange={setShowSubmitted}
+              />
+            </SwitchGroup>
+          </div>
         </div>
       )}
     </div>

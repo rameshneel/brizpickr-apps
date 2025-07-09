@@ -30,7 +30,11 @@ export {
   RadioGroupItem,
   RadioGroupItemWithLabel,
 } from './lib/components/ui/radio-group';
-export { Switch, SwitchWithLabel } from './lib/components/ui/switch';
+export {
+  Switch,
+  SwitchWithLabel,
+  SwitchGroup,
+} from './lib/components/ui/switch';
 export {
   Select,
   SelectItem,
@@ -54,6 +58,38 @@ export {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from './lib/components/ui/dropdown-menu';
+export {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbSeparator,
+  BreadcrumbHome,
+} from './lib/components/ui/breadcrumb';
+export {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationPrevious,
+  PaginationNext,
+  PaginationEllipsis,
+  usePagination,
+} from './lib/components/ui/pagination';
+export {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from './lib/components/ui/accordion';
+export {
+  Stepper,
+  StepperItem,
+  StepperIndicator,
+  StepperContent,
+  StepperTitle,
+  StepperDescription,
+  StepperSeparator,
+  useStepper,
+} from './lib/components/ui/stepper';
 
 // Feedback Components
 export {
@@ -64,6 +100,19 @@ export {
 } from './lib/components/ui/alert';
 export { Progress } from './lib/components/ui/progress';
 export { Tooltip } from './lib/components/ui/tooltip';
+export {
+  LoadingSpinner,
+  LoadingOverlay,
+  Skeleton,
+  SkeletonText,
+  SkeletonAvatar,
+  SkeletonButton,
+} from './lib/components/ui/loading-spinner';
+export {
+  Notification,
+  NotificationContainer,
+  useNotifications,
+} from './lib/components/ui/notification';
 
 // Overlay Components
 export {

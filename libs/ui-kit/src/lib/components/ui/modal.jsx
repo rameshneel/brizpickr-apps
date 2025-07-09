@@ -19,6 +19,8 @@ const Modal = React.forwardRef(
     ref
   ) => {
     const modalRef = useRef(null);
+    const [isVisible, setIsVisible] = useState(false);
+    const [isAnimating, setIsAnimating] = useState(false);
 
     useEffect(() => {
       const handleEscape = event => {
@@ -30,6 +32,18 @@ const Modal = React.forwardRef(
       if (isOpen) {
         document.addEventListener('keydown', handleEscape);
         document.body.style.overflow = 'hidden';
+        setIsVisible(true);
+        setIsAnimating(true);
+
+        // Trigger animation after mount
+        setTimeout(() => setIsAnimating(false), 10);
+      } else {
+        setIsAnimating(true);
+        setTimeout(() => {
+          setIsVisible(false);
+          document.body.style.overflow = 'unset';
+          setIsAnimating(false);
+        }, 200);
       }
 
       return () => {
@@ -52,13 +66,16 @@ const Modal = React.forwardRef(
       full: 'max-w-full mx-4',
     };
 
-    if (!isOpen) return null;
+    if (!isVisible && !isOpen) return null;
 
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         {/* Backdrop */}
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+          className={cn(
+            'fixed inset-0 bg-black/50 backdrop-blur-sm transition-all duration-200',
+            isAnimating ? 'opacity-0' : 'opacity-100'
+          )}
           onClick={handleBackdropClick}
         />
 
@@ -66,8 +83,9 @@ const Modal = React.forwardRef(
         <div
           ref={ref}
           className={cn(
-            'relative z-50 w-full rounded-lg bg-background p-6 shadow-lg transition-all',
+            'relative z-50 w-full rounded-lg bg-background p-6 shadow-xl transition-all duration-200',
             sizes[size],
+            isAnimating ? 'scale-95 opacity-0' : 'scale-100 opacity-100',
             className
           )}
           {...props}
@@ -81,7 +99,7 @@ const Modal = React.forwardRef(
               {showCloseButton && (
                 <button
                   onClick={onClose}
-                  className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  className="rounded-sm opacity-70 ring-offset-background transition-all hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 hover:bg-accent hover:text-accent-foreground p-1"
                 >
                   <X className="h-4 w-4" />
                   <span className="sr-only">Close</span>

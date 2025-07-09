@@ -18,18 +18,20 @@ class ErrorBoundary extends React.Component {
     return {
       hasError: true,
       error,
-      errorId: this.generateErrorId(),
     };
   }
 
   componentDidCatch(error, errorInfo) {
+    // Generate error ID
+    const errorId = this.generateErrorId();
+
     // Log error to console in development
     if (process.env.NODE_ENV === 'development') {
       console.error('ErrorBoundary caught an error:', error, errorInfo);
     }
 
-    // Update state with error info
-    this.setState({ errorInfo });
+    // Update state with error info and error ID
+    this.setState({ errorInfo, errorId });
 
     // Log to error reporting service in production
     if (process.env.NODE_ENV === 'production') {
@@ -38,7 +40,7 @@ class ErrorBoundary extends React.Component {
 
     // Call custom error handler if provided
     if (this.props.onError) {
-      this.props.onError(error, errorInfo, this.state.errorId);
+      this.props.onError(error, errorInfo, errorId);
     }
   }
 

@@ -149,7 +149,7 @@ import {
 ### Switch
 
 ```jsx
-import { Switch, SwitchWithLabel } from '@brizpickr/ui-kit';
+import { Switch, SwitchWithLabel, SwitchGroup } from '@brizpickr/ui-kit';
 
 // Basic switch
 <Switch checked={checked} onCheckedChange={setChecked} />
@@ -161,6 +161,66 @@ import { Switch, SwitchWithLabel } from '@brizpickr/ui-kit';
   checked={checked}
   onCheckedChange={setChecked}
 />
+
+// With description
+<SwitchWithLabel
+  id="dark-mode"
+  label="Dark Mode"
+  description="Switch to dark theme for better viewing in low light"
+  checked={checked}
+  onCheckedChange={setChecked}
+/>
+
+// Disabled switch
+<SwitchWithLabel
+  id="beta-features"
+  label="Beta Features"
+  description="Access experimental features (coming soon)"
+  checked={false}
+  onCheckedChange={() => {}}
+  disabled={true}
+/>
+
+// Switch group
+<SwitchGroup>
+  <SwitchWithLabel
+    id="email-notifications"
+    label="Email Notifications"
+    description="Receive updates via email"
+    checked={emailChecked}
+    onCheckedChange={setEmailChecked}
+  />
+  <SwitchWithLabel
+    id="push-notifications"
+    label="Push Notifications"
+    description="Receive instant notifications"
+    checked={pushChecked}
+    onCheckedChange={setPushChecked}
+  />
+  <SwitchWithLabel
+    id="sms-notifications"
+    label="SMS Notifications"
+    description="Receive updates via SMS"
+    checked={smsChecked}
+    onCheckedChange={setSmsChecked}
+  />
+</SwitchGroup>
+
+// Horizontal switch group
+<SwitchGroup orientation="horizontal">
+  <SwitchWithLabel
+    id="auto-save"
+    label="Auto Save"
+    checked={autoSaveChecked}
+    onCheckedChange={setAutoSaveChecked}
+  />
+  <SwitchWithLabel
+    id="sync"
+    label="Sync"
+    checked={syncChecked}
+    onCheckedChange={setSyncChecked}
+  />
+</SwitchGroup>
 ```
 
 ### Select
