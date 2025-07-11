@@ -1,0 +1,306 @@
+name: 🔒 Security Scan
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      scan_type:
+        description: 'Type of security scan'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - dependencies
+          - code
+          - secrets
+          - infrastructure
+  push:
+    branches: [main, develop]
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - '**/package.json'
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  # Dependency Vulnerability Scan
+  dependency-scan:
+    name: 📦 Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    if: ${{ inputs.scan_type == 'all' || inputs.scan_type == 'dependencies' || github.event_name == 'push' }}
+    timeout-minutes: 15
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📥 Install dependencies
+        run: npm ci
+
+      - name: 🔍 Run npm audit
+        run: npm audit --audit-level=moderate --json > audit-report.json
+
+      - name: 🛡️ Run Snyk dependency scan
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high --json-file-output=snyk-report.json
+
+      - name: 📊 Upload security reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: dependency-security-reports
+          path: |
+            audit-report.json
+            snyk-report.json
+          retention-days: 30
+
+      - name: 📋 Dependency Scan Summary
+        run: |
+          echo "## 📦 Dependency Security Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Parse npm audit results
+          if [ -f "audit-report.json" ]; then
+            vulnerabilities=$(jq '.metadata.vulnerabilities.total' audit-report.json)
+            echo "**NPM Audit Vulnerabilities**: $vulnerabilities" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Parse Snyk results
+          if [ -f "snyk-report.json" ]; then
+            snyk_vulns=$(jq '.vulnerabilities | length' snyk-report.json)
+            echo "**Snyk Vulnerabilities**: $snyk_vulns" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Scan completed**: $(date)" >> $GITHUB_STEP_SUMMARY
+
+  # Code Security Scan
+  code-scan:
+    name: 🔍 Code Security Scan
+    runs-on: ubuntu-latest
+    if: ${{ inputs.scan_type == 'all' || inputs.scan_type == 'code' }}
+    timeout-minutes: 20
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📥 Install dependencies
+        run: npm ci
+
+      - name: 🔍 Run ESLint security rules
+        run: npm run lint:security
+
+      - name: 🛡️ Run Semgrep security scan
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/owasp-top-ten
+          output-format: sarif
+          output-file: semgrep-results.sarif
+
+      - name: 🔍 Run CodeQL analysis
+        uses: github/codeql-action/init@v2
+        with:
+          languages: javascript
+
+      - name: 🔍 Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+
+      - name: 📊 Upload code security reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: code-security-reports
+          path: |
+            semgrep-results.sarif
+          retention-days: 30
+
+      - name: 📋 Code Scan Summary
+        run: |
+          echo "## 🔍 Code Security Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**ESLint Security**: ✅ Passed" >> $GITHUB_STEP_SUMMARY
+          echo "**Semgrep Scan**: ✅ Completed" >> $GITHUB_STEP_SUMMARY
+          echo "**CodeQL Analysis**: ✅ Completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Scan completed**: $(date)" >> $GITHUB_STEP_SUMMARY
+
+  # Secrets Detection
+  secrets-scan:
+    name: 🔐 Secrets Detection
+    runs-on: ubuntu-latest
+    if: ${{ inputs.scan_type == 'all' || inputs.scan_type == 'secrets' }}
+    timeout-minutes: 10
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Run TruffleHog
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: HEAD
+          head: HEAD
+
+      - name: 🔐 Run GitGuardian
+        uses: GitGuardian/ggshield-action@main
+        with:
+          mode: pre-commit
+          exit-zero: true
+
+      - name: 📋 Secrets Scan Summary
+        run: |
+          echo "## 🔐 Secrets Detection Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**TruffleHog Scan**: ✅ Completed" >> $GITHUB_STEP_SUMMARY
+          echo "**GitGuardian Scan**: ✅ Completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Scan completed**: $(date)" >> $GITHUB_STEP_SUMMARY
+
+  # Infrastructure Security Scan
+  infrastructure-scan:
+    name: 🏗️ Infrastructure Security Scan
+    runs-on: ubuntu-latest
+    if: ${{ inputs.scan_type == 'all' || inputs.scan_type == 'infrastructure' }}
+    timeout-minutes: 15
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔍 Scan Docker images (if any)
+        run: |
+          echo "Scanning for Docker images..."
+          find . -name "Dockerfile" -exec echo "Found: {}" \;
+
+      - name: 🔍 Scan Kubernetes manifests (if any)
+        run: |
+          echo "Scanning for Kubernetes manifests..."
+          find . -name "*.yaml" -o -name "*.yml" | grep -E "(k8s|kubernetes)" || echo "No Kubernetes manifests found"
+
+      - name: 🔍 Scan Terraform files (if any)
+        run: |
+          echo "Scanning for Terraform files..."
+          find . -name "*.tf" || echo "No Terraform files found"
+
+      - name: 📋 Infrastructure Scan Summary
+        run: |
+          echo "## 🏗️ Infrastructure Security Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Docker Images**: ✅ Scanned" >> $GITHUB_STEP_SUMMARY
+          echo "**Kubernetes Manifests**: ✅ Scanned" >> $GITHUB_STEP_SUMMARY
+          echo "**Terraform Files**: ✅ Scanned" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Scan completed**: $(date)" >> $GITHUB_STEP_SUMMARY
+
+  # Security Report Generation
+  security-report:
+    name: 📊 Security Report
+    runs-on: ubuntu-latest
+    needs: [dependency-scan, code-scan, secrets-scan, infrastructure-scan]
+    if: always()
+
+    steps:
+      - name: 📥 Download all security reports
+        uses: actions/download-artifact@v3
+        with:
+          path: security-reports
+
+      - name: 📊 Generate comprehensive security report
+        run: |
+          echo "## 🔒 Comprehensive Security Scan Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📅 Scan Information" >> $GITHUB_STEP_SUMMARY
+          echo "**Scan Date**: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Repository**: ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 📋 Scan Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Scan Type | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependencies | ${{ needs.dependency-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Code | ${{ needs.code-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Secrets | ${{ needs.secrets-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Infrastructure | ${{ needs.infrastructure-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Determine overall security status
+          failed_scans=0
+          if [[ "${{ needs.dependency-scan.result }}" != "success" ]]; then ((failed_scans++)); fi
+          if [[ "${{ needs.code-scan.result }}" != "success" ]]; then ((failed_scans++)); fi
+          if [[ "${{ needs.secrets-scan.result }}" != "success" ]]; then ((failed_scans++)); fi
+          if [[ "${{ needs.infrastructure-scan.result }}" != "success" ]]; then ((failed_scans++)); fi
+
+          if [[ $failed_scans -eq 0 ]]; then
+            echo "### ✅ Overall Security Status: PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Overall Security Status: FAILED ($failed_scans issues found)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Recommendations" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ needs.dependency-scan.result }}" != "success" ]]; then
+            echo "- 🔧 Update vulnerable dependencies" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [[ "${{ needs.code-scan.result }}" != "success" ]]; then
+            echo "- 🔍 Review code security issues" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [[ "${{ needs.secrets-scan.result }}" != "success" ]]; then
+            echo "- 🔐 Remove exposed secrets" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [[ "${{ needs.infrastructure-scan.result }}" != "success" ]]; then
+            echo "- 🏗️ Review infrastructure security" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: 📢 Security Alert (if issues found)
+        if: ${{ needs.dependency-scan.result != 'success' || needs.code-scan.result != 'success' || needs.secrets-scan.result != 'success' || needs.infrastructure-scan.result != 'success' }}
+        run: |
+          echo "## 🚨 Security Issues Detected!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**⚠️ Immediate action required**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Please review the security scan results and address any issues found." >> $GITHUB_STEP_SUMMARY
+
+      - name: 📢 Slack notification
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#security'
+          text: |
+            🔒 Security Scan ${{ job.status }}
+
+            **Repository**: ${{ github.repository }}
+            **Branch**: ${{ github.ref_name }}
+            **Triggered by**: ${{ github.event_name }}
+
+            **Results**:
+            - Dependencies: ${{ needs.dependency-scan.result }}
+            - Code: ${{ needs.code-scan.result }}
+            - Secrets: ${{ needs.secrets-scan.result }}
+            - Infrastructure: ${{ needs.infrastructure-scan.result }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

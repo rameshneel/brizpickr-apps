@@ -10,10 +10,10 @@ export const validatePassword = password => {
   return passwordRegex.test(password);
 };
 
-export const validatePhoneNumber = phoneNumber => {
-  const phoneRegex = /^\+?[\d\s\-\(\)]{10,}$/;
-  return phoneRegex.test(phoneNumber);
-};
+// export const validatePhoneNumber = phoneNumber => {
+//   const phoneRegex = /^\+?[\d\s\-\(\)]{10,}$/;
+//   return phoneRegex.test(phoneNumber);
+// };
 
 export const validateRequired = value => {
   return value && value.toString().trim().length > 0;

@@ -1,23 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-  Button,
-  Input,
-  Badge,
-  Select,
-  Modal,
-  Alert,
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationPrevious,
-  PaginationNext,
-  PaginationEllipsis,
-  usePagination,
-  SwitchWithLabel,
-  SwitchGroup,
-} from '@brizpickr/ui-kit';
+import { Button, Input, Badge, Dialog } from '@brizpickr/ui-kit';
 
 // Dummy data fetcher (simulate API)
 const fetchProjects = async () => {
@@ -80,8 +63,8 @@ const statusMap = {
 export default function ProjectsDashboard() {
   const [tab, setTab] = useState('submitted');
   const [search, setSearch] = useState('');
-  const [showDrafts, setShowDrafts] = useState(false);
-  const [showSubmitted, setShowSubmitted] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['projects'],
     queryFn: fetchProjects,
@@ -96,14 +79,19 @@ export default function ProjectsDashboard() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">Project’s</h1>
-          <p className="text-gray-500">
-            Overview Of Your Projects And Their Progress
-          </p>
+      <div className="p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold">Projects</h1>
+          <Button onClick={() => setShowModal(true)}>+ New Requirement</Button>
         </div>
-        <Button>+ New Requirement</Button>
+
+        {/* Modal */}
+        {/* <Dialog isOpen={showModal} onClose={() => setShowModal(false)} title="New Requirement">
+        <p className="text-center font-medium">hello world fvfvf</p>
+        <div className="mt-6 text-center">
+          <Button onClick={() => setShowModal(false)}>Close</Button>
+        </div>
+      </Dialog> */}
       </div>
 
       <div className="flex items-center gap-2 mb-4">
@@ -114,6 +102,7 @@ export default function ProjectsDashboard() {
           Submitted
         </Button>
         <Button
+          className={'bg-black'}
           variant={tab === 'draft' ? 'default' : 'outline'}
           onClick={() => setTab('draft')}
         >
@@ -126,6 +115,7 @@ export default function ProjectsDashboard() {
           onChange={e => setSearch(e.target.value)}
         />
       </div>
+
       {isLoading ? (
         <div className="text-center py-12">Loading...</div>
       ) : (
@@ -166,31 +156,6 @@ export default function ProjectsDashboard() {
               <Button className="mt-4 w-full">View Project</Button>
             </div>
           ))}
-          <div className="flex items-center gap-2 mb-4">
-            <Select
-              options={[
-                { label: 'All', value: 'all' },
-                { label: 'Submitted', value: 'submitted' },
-                { label: 'Draft', value: 'draft' },
-              ]}
-              value={tab}
-              onChange={setTab}
-            />
-            <SwitchGroup orientation="horizontal">
-              <SwitchWithLabel
-                id="show-drafts"
-                label="Show Drafts"
-                checked={showDrafts}
-                onCheckedChange={setShowDrafts}
-              />
-              <SwitchWithLabel
-                id="show-submitted"
-                label="Show Submitted"
-                checked={showSubmitted}
-                onCheckedChange={setShowSubmitted}
-              />
-            </SwitchGroup>
-          </div>
         </div>
       )}
     </div>

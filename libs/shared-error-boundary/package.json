@@ -7,7 +7,7 @@
   "scripts": {
     "build": "echo 'No build step required for JS library'",
     "test": "echo 'No tests specified'",
-    "lint": "eslint src/**/*.js"
+    "lint": "eslint src/**/*.{js,jsx}"
   },
   "peerDependencies": {
     "react": "^18.0.0",
@@ -28,4 +28,4 @@
   ],
   "author": "BrizPickr Team",
   "license": "MIT"
-} 
+}

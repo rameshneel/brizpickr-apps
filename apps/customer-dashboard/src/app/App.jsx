@@ -3,7 +3,6 @@ import AppRoutes from './routes/AppRoutes';
 import { ErrorBoundary } from '@brizpickr/shared-error-boundary';
 
 export default function App() {
-  console.log('process.env.NODE_ENV', process.env.NODE_ENV);
   return (
     <ErrorBoundary
       theme="default"

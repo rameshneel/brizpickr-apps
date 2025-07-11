@@ -146,7 +146,7 @@ const ProductList = () => {
 
 ## 📚 Documentation
 
-- **[Junior Developer Setup Guide](./JUNIOR_DEVELOPER_SETUP_GUIDE.md)** - Complete guide for new developers
+- **[Junior Developer Setup Guide](./DEVELOPER_SETUP_GUIDE.md)** - Complete guide for new developers
 - **[NX Documentation](https://nx.dev/)** - Monorepo management
 - **[Tailwind CSS](https://tailwindcss.com/)** - Utility-first CSS
 - **[TanStack Query](https://tanstack.com/query)** - Server state management

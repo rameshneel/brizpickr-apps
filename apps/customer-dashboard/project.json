@@ -60,8 +60,11 @@
     },
     "lint": {
       "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": ["apps/customer-dashboard/**/*.{ts,tsx,js,jsx}"]
+      }
     }
   },
   "tags": ["scope:customer", "type:app"]
-} 
+}

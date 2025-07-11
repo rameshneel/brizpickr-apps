@@ -1,0 +1,274 @@
+name: 🚀 Deploy to Staging
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'App to deploy (or "all")'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - customer-dashboard
+          - vendor-portal
+          - super-admin
+          - internal-crm
+          - landing-page
+      force:
+        description: 'Force deployment (skip CI checks)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  NODE_VERSION: '18'
+  ENVIRONMENT: 'staging'
+
+jobs:
+  # Wait for CI to complete
+  wait-for-ci:
+    name: ⏳ Wait for CI
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.force }}
+
+    steps:
+      - name: ⏳ Wait for CI pipeline
+        uses: lewagon/wait-on-check-action@v1.3.1
+        with:
+          ref: ${{ github.ref }}
+          check-name: '🧪 Continuous Integration'
+          wait-interval: 10
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+  # Deploy to Vercel (Recommended)
+  deploy-vercel:
+    name: 🚀 Deploy to Vercel Staging
+    runs-on: ubuntu-latest
+    needs: [wait-for-ci]
+    if: ${{ always() && (needs.wait-for-ci.result == 'success' || inputs.force) }}
+    environment: staging
+    timeout-minutes: 30
+
+    strategy:
+      matrix:
+        app: ${{ fromJson('["' + (inputs.app == 'all' && 'customer-dashboard,vendor-portal,super-admin,internal-crm,landing-page' || inputs.app) + '"]') }}
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📥 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build ${{ matrix.app }}
+        run: npm run build:${{ matrix.app }}
+        env:
+          VITE_APP_ENV: ${{ env.ENVIRONMENT }}
+          VITE_API_URL: ${{ secrets.STAGING_API_URL }}
+
+      - name: 📦 Install Vercel CLI
+        run: npm i -g vercel@latest
+
+      - name: 🔐 Setup Vercel
+        run: |
+          echo ${{ secrets.VERCEL_TOKEN }} | vercel login --token
+
+      - name: 🚀 Deploy to Vercel
+        run: |
+          cd apps/${{ matrix.app }}
+          vercel --prod --yes
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_${{ matrix.app }} }}
+
+      - name: 📊 Deployment URL
+        run: |
+          echo "## 🚀 ${{ matrix.app }} Deployed to Staging" >> $GITHUB_STEP_SUMMARY
+          echo "**URL**: https://${{ matrix.app }}-staging.brizpickr.com" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+
+  # Deploy to VPS (Alternative)
+  deploy-vps:
+    name: 🖥️ Deploy to VPS Staging
+    runs-on: ubuntu-latest
+    needs: [wait-for-ci]
+    if: ${{ always() && (needs.wait-for-ci.result == 'success' || inputs.force) && false }} # Disabled by default
+    environment: staging
+    timeout-minutes: 45
+
+    strategy:
+      matrix:
+        app: ${{ fromJson('["' + (inputs.app == 'all' && 'customer-dashboard,vendor-portal,super-admin,internal-crm,landing-page' || inputs.app) + '"]') }}
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📥 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build ${{ matrix.app }}
+        run: npm run build:${{ matrix.app }}
+        env:
+          VITE_APP_ENV: ${{ env.ENVIRONMENT }}
+          VITE_API_URL: ${{ secrets.STAGING_API_URL }}
+
+      - name: 📦 Create deployment package
+        run: |
+          tar -czf ${{ matrix.app }}-staging.tar.gz -C apps/${{ matrix.app }}/dist .
+
+      - name: 📤 Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.app }}-staging-build
+          path: ${{ matrix.app }}-staging.tar.gz
+          retention-days: 1
+
+      - name: 🔐 Setup SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: 🚀 Deploy to VPS
+        run: |
+          # Download build artifact
+          gh run download --name ${{ matrix.app }}-staging-build
+
+          # Deploy to VPS
+          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+            # Create backup
+            sudo mkdir -p /var/backups/brizpickr/${{ matrix.app }}/staging
+            sudo cp -r /var/www/${{ matrix.app }} /var/backups/brizpickr/${{ matrix.app }}/staging/$(date +%Y%m%d-%H%M%S) || true
+            
+            # Extract new build
+            sudo rm -rf /var/www/${{ matrix.app }}
+            sudo mkdir -p /var/www/${{ matrix.app }}
+            sudo tar -xzf ${{ matrix.app }}-staging.tar.gz -C /var/www/${{ matrix.app }}
+            
+            # Set permissions
+            sudo chown -R www-data:www-data /var/www/${{ matrix.app }}
+            sudo chmod -R 755 /var/www/${{ matrix.app }}
+            
+            # Restart nginx
+            sudo systemctl restart nginx
+            
+            # Cleanup
+            rm ${{ matrix.app }}-staging.tar.gz
+          EOF
+
+      - name: 📊 Deployment URL
+        run: |
+          echo "## 🖥️ ${{ matrix.app }} Deployed to VPS Staging" >> $GITHUB_STEP_SUMMARY
+          echo "**URL**: https://${{ matrix.app }}-staging.brizpickr.com" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Server**: ${{ secrets.VPS_HOST }}" >> $GITHUB_STEP_SUMMARY
+
+  # Health Check
+  health-check:
+    name: 🏥 Health Check
+    runs-on: ubuntu-latest
+    needs: [deploy-vercel, deploy-vps]
+    if: always()
+    timeout-minutes: 10
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🏥 Run health checks
+        run: |
+          # Wait for deployment to stabilize
+          sleep 30
+
+          # Check health endpoints
+          for app in ${{ fromJson('["' + (inputs.app == 'all' && 'customer-dashboard,vendor-portal,super-admin,internal-crm,landing-page' || inputs.app) + '"]') }}; do
+            echo "Checking $app..."
+            
+            # Vercel health check
+            if curl -f "https://$app-staging.brizpickr.com/health" > /dev/null 2>&1; then
+              echo "✅ $app (Vercel) - Healthy"
+            else
+              echo "❌ $app (Vercel) - Unhealthy"
+              exit 1
+            fi
+            
+            # VPS health check (if enabled)
+            if [[ "${{ needs.deploy-vps.result }}" == "success" ]]; then
+              if curl -f "https://$app-staging.brizpickr.com/health" > /dev/null 2>&1; then
+                echo "✅ $app (VPS) - Healthy"
+              else
+                echo "❌ $app (VPS) - Unhealthy"
+                exit 1
+              fi
+            fi
+          done
+
+      - name: 📊 Health Check Summary
+        run: |
+          echo "## 🏥 Health Check Results" >> $GITHUB_STEP_SUMMARY
+          echo "**Status**: ✅ All applications healthy" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Checked at**: $(date)" >> $GITHUB_STEP_SUMMARY
+
+  # Notify Team
+  notify:
+    name: 📢 Notify Team
+    runs-on: ubuntu-latest
+    needs: [health-check]
+    if: always()
+
+    steps:
+      - name: 📢 Slack Notification
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#deployments'
+          text: |
+            🚀 Staging Deployment ${{ job.status }}
+
+            **Apps**: ${{ inputs.app }}
+            **Environment**: ${{ env.ENVIRONMENT }}
+            **Commit**: ${{ github.sha }}
+            **Triggered by**: ${{ github.actor }}
+
+            ${{ needs.health-check.result == 'success' && '✅ All health checks passed' || '❌ Health checks failed' }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: 📧 Email Notification (if failed)
+        if: failure()
+        run: |
+          echo "Sending failure notification email..."
+          # Add email notification logic here
+
+      - name: 📊 Final Summary
+        run: |
+          echo "## 🚀 Staging Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Apps Deployed**: ${{ inputs.app }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployment Status**: ${{ needs.health-check.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Health Checks**: ${{ needs.health-check.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. ✅ Verify functionality in staging" >> $GITHUB_STEP_SUMMARY
+          echo "2. 🧪 Run manual tests" >> $GITHUB_STEP_SUMMARY
+          echo "3. 📝 Update release notes" >> $GITHUB_STEP_SUMMARY
+          echo "4. 🚀 Deploy to production when ready" >> $GITHUB_STEP_SUMMARY

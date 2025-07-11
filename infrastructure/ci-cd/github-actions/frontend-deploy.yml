@@ -1,0 +1,214 @@
+name: Frontend Deployment Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      app:
+        description: 'App to deploy (leave empty for all)'
+        required: false
+        type: string
+
+env:
+  NODE_VERSION: '18'
+  NX_CLOUD_ACCESS_TOKEN: ${{ secrets.NX_CLOUD_ACCESS_TOKEN }}
+
+jobs:
+  # Deploy to Staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+    environment: staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build applications
+        run: |
+          npx nx run-many --target=build --all
+          npx nx run-many --target=test --all
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker images
+        run: |
+          # Build and push customer dashboard
+          docker build -t ${{ steps.login-ecr.outputs.registry }}/brizpickr/customer-dashboard:staging-${{ github.sha }} -f infrastructure/docker/customer-dashboard/Dockerfile .
+          docker push ${{ steps.login-ecr.outputs.registry }}/brizpickr/customer-dashboard:staging-${{ github.sha }}
+
+          # Build and push vendor portal
+          docker build -t ${{ steps.login-ecr.outputs.registry }}/brizpickr/vendor-portal:staging-${{ github.sha }} -f infrastructure/docker/vendor-portal/Dockerfile .
+          docker push ${{ steps.login-ecr.outputs.registry }}/brizpickr/vendor-portal:staging-${{ github.sha }}
+
+          # Build and push super admin
+          docker build -t ${{ steps.login-ecr.outputs.registry }}/brizpickr/super-admin:staging-${{ github.sha }} -f infrastructure/docker/super-admin/Dockerfile .
+          docker push ${{ steps.login-ecr.outputs.registry }}/brizpickr/super-admin:staging-${{ github.sha }}
+
+      - name: Deploy to Kubernetes (Staging)
+        run: |
+          kubectl config use-context staging-cluster
+          kubectl set image deployment/customer-dashboard customer-dashboard=${{ steps.login-ecr.outputs.registry }}/brizpickr/customer-dashboard:staging-${{ github.sha }}
+          kubectl set image deployment/vendor-portal vendor-portal=${{ steps.login-ecr.outputs.registry }}/brizpickr/vendor-portal:staging-${{ github.sha }}
+          kubectl set image deployment/super-admin super-admin=${{ steps.login-ecr.outputs.registry }}/brizpickr/super-admin:staging-${{ github.sha }}
+
+      - name: Run smoke tests
+        run: |
+          npx nx run-many --target=e2e --all --configuration=staging
+
+      - name: Notify deployment success
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          channel: '#deployments'
+          text: '✅ Staging deployment successful!'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Deploy to Production
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    environment: production
+    needs: deploy-staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build applications
+        run: |
+          npx nx run-many --target=build --all --configuration=production
+          npx nx run-many --target=test --all
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker images
+        run: |
+          # Build and push customer dashboard
+          docker build -t ${{ steps.login-ecr.outputs.registry }}/brizpickr/customer-dashboard:production-${{ github.sha }} -f infrastructure/docker/customer-dashboard/Dockerfile .
+          docker push ${{ steps.login-ecr.outputs.registry }}/brizpickr/customer-dashboard:production-${{ github.sha }}
+
+          # Build and push vendor portal
+          docker build -t ${{ steps.login-ecr.outputs.registry }}/brizpickr/vendor-portal:production-${{ github.sha }} -f infrastructure/docker/vendor-portal/Dockerfile .
+          docker push ${{ steps.login-ecr.outputs.registry }}/brizpickr/vendor-portal:production-${{ github.sha }}
+
+          # Build and push super admin
+          docker build -t ${{ steps.login-ecr.outputs.registry }}/brizpickr/super-admin:production-${{ github.sha }} -f infrastructure/docker/super-admin/Dockerfile .
+          docker push ${{ steps.login-ecr.outputs.registry }}/brizpickr/super-admin:production-${{ github.sha }}
+
+      - name: Deploy to Kubernetes (Production)
+        run: |
+          kubectl config use-context production-cluster
+          kubectl set image deployment/customer-dashboard customer-dashboard=${{ steps.login-ecr.outputs.registry }}/brizpickr/customer-dashboard:production-${{ github.sha }}
+          kubectl set image deployment/vendor-portal vendor-portal=${{ steps.login-ecr.outputs.registry }}/brizpickr/vendor-portal:production-${{ github.sha }}
+          kubectl set image deployment/super-admin super-admin=${{ steps.login-ecr.outputs.registry }}/brizpickr/super-admin:production-${{ github.sha }}
+
+      - name: Run production smoke tests
+        run: |
+          npx nx run-many --target=e2e --all --configuration=production
+
+      - name: Create GitHub release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.run_number }}
+          release_name: Release v${{ github.run_number }}
+          body: |
+            Production deployment for commit ${{ github.sha }}
+
+            Changes:
+            - Customer Dashboard updates
+            - Vendor Portal updates
+            - Super Admin updates
+          draft: false
+          prerelease: false
+
+      - name: Notify deployment success
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          channel: '#deployments'
+          text: '🚀 Production deployment successful! Release v${{ github.run_number }}'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Rollback job (manual trigger)
+  rollback:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Rollback Kubernetes deployment
+        run: |
+          kubectl config use-context ${{ github.event.inputs.environment }}-cluster
+          kubectl rollout undo deployment/customer-dashboard
+          kubectl rollout undo deployment/vendor-portal
+          kubectl rollout undo deployment/super-admin
+
+      - name: Notify rollback
+        uses: 8398a7/action-slack@v3
+        with:
+          status: warning
+          channel: '#deployments'
+          text: '⚠️ Rollback completed for ${{ github.event.inputs.environment }} environment'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

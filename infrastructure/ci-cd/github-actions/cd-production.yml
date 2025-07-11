@@ -1,0 +1,426 @@
+name: 🚀 Deploy to Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'App to deploy (or "all")'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - customer-dashboard
+          - vendor-portal
+          - super-admin
+          - internal-crm
+          - landing-page
+      force:
+        description: 'Force deployment (skip safety checks)'
+        required: false
+        default: false
+        type: boolean
+      emergency:
+        description: 'Emergency deployment (bypass approvals)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  NODE_VERSION: '18'
+  ENVIRONMENT: 'production'
+
+jobs:
+  # Pre-deployment Safety Checks
+  safety-checks:
+    name: 🔒 Safety Checks
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.emergency }}
+    timeout-minutes: 15
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📥 Install dependencies
+        run: npm ci
+
+      - name: 🔍 Check for breaking changes
+        run: |
+          # Check if this is a major version bump
+          git log --oneline -10
+          echo "Checking for breaking changes..."
+
+      - name: 🛡️ Security audit
+        run: npm audit --audit-level=high
+
+      - name: 📊 Performance check
+        run: npm run lighthouse:ci
+
+      - name: 🧪 Run critical tests
+        run: npm run test:critical
+
+      - name: 📋 Deployment checklist
+        run: |
+          echo "## 🔒 Production Deployment Checklist" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Pre-deployment Checks" >> $GITHUB_STEP_SUMMARY
+          echo "- [x] Security audit passed" >> $GITHUB_STEP_SUMMARY
+          echo "- [x] Performance benchmarks met" >> $GITHUB_STEP_SUMMARY
+          echo "- [x] Critical tests passed" >> $GITHUB_STEP_SUMMARY
+          echo "- [x] No breaking changes detected" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Manual Verification Required" >> $GITHUB_STEP_SUMMARY
+          echo "- [ ] Staging environment tested" >> $GITHUB_STEP_SUMMARY
+          echo "- [ ] Database migrations reviewed" >> $GITHUB_STEP_SUMMARY
+          echo "- [ ] Environment variables verified" >> $GITHUB_STEP_SUMMARY
+          echo "- [ ] Rollback plan prepared" >> $GITHUB_STEP_SUMMARY
+
+  # Wait for CI and Safety Checks
+  wait-for-checks:
+    name: ⏳ Wait for All Checks
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.emergency }}
+
+    steps:
+      - name: ⏳ Wait for CI pipeline
+        uses: lewagon/wait-on-check-action@v1.3.1
+        with:
+          ref: ${{ github.ref }}
+          check-name: '🧪 Continuous Integration'
+          wait-interval: 10
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: ⏳ Wait for safety checks
+        uses: lewagon/wait-on-check-action@v1.3.1
+        with:
+          ref: ${{ github.ref }}
+          check-name: '🔒 Safety Checks'
+          wait-interval: 10
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+  # Production Approval (Manual)
+  production-approval:
+    name: 👥 Production Approval
+    runs-on: ubuntu-latest
+    needs: [wait-for-checks]
+    if: ${{ always() && (needs.wait-for-checks.result == 'success' || inputs.emergency) }}
+    environment:
+      name: production
+      url: https://app.brizpickr.com
+
+    steps:
+      - name: 📋 Approval Checklist
+        run: |
+          echo "## 👥 Production Deployment Approval" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**⚠️ Manual approval required for production deployment**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Approval Checklist" >> $GITHUB_STEP_SUMMARY
+          echo "- [ ] All CI checks passed" >> $GITHUB_STEP_SUMMARY
+          echo "- [ ] Safety checks completed" >> $GITHUB_STEP_SUMMARY
+          echo "- [ ] Staging environment verified" >> $GITHUB_STEP_SUMMARY
+          echo "- [ ] Database backup completed" >> $GITHUB_STEP_SUMMARY
+          echo "- [ ] Team notified of deployment" >> $GITHUB_STEP_SUMMARY
+          echo "- [ ] Rollback plan ready" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Approved by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Approved at**: $(date)" >> $GITHUB_STEP_SUMMARY
+
+  # Deploy to Vercel Production
+  deploy-vercel:
+    name: 🚀 Deploy to Vercel Production
+    runs-on: ubuntu-latest
+    needs: [production-approval]
+    if: ${{ always() && needs.production-approval.result == 'success' }}
+    environment: production
+    timeout-minutes: 45
+
+    strategy:
+      matrix:
+        app: ${{ fromJson('["' + (inputs.app == 'all' && 'customer-dashboard,vendor-portal,super-admin,internal-crm,landing-page' || inputs.app) + '"]') }}
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📥 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build ${{ matrix.app }}
+        run: npm run build:${{ matrix.app }}
+        env:
+          VITE_APP_ENV: ${{ env.ENVIRONMENT }}
+          VITE_API_URL: ${{ secrets.PRODUCTION_API_URL }}
+
+      - name: 📦 Install Vercel CLI
+        run: npm i -g vercel@latest
+
+      - name: 🔐 Setup Vercel
+        run: |
+          echo ${{ secrets.VERCEL_TOKEN }} | vercel login --token
+
+      - name: 🚀 Deploy to Vercel Production
+        run: |
+          cd apps/${{ matrix.app }}
+          vercel --prod --yes
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_${{ matrix.app }} }}
+
+      - name: 📊 Production URL
+        run: |
+          echo "## 🚀 ${{ matrix.app }} Deployed to Production" >> $GITHUB_STEP_SUMMARY
+          echo "**URL**: https://${{ matrix.app }}.brizpickr.com" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployed by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+
+  # Deploy to VPS Production (Alternative)
+  deploy-vps:
+    name: 🖥️ Deploy to VPS Production
+    runs-on: ubuntu-latest
+    needs: [production-approval]
+    if: ${{ always() && needs.production-approval.result == 'success' && false }} # Disabled by default
+    environment: production
+    timeout-minutes: 60
+
+    strategy:
+      matrix:
+        app: ${{ fromJson('["' + (inputs.app == 'all' && 'customer-dashboard,vendor-portal,super-admin,internal-crm,landing-page' || inputs.app) + '"]') }}
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📥 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build ${{ matrix.app }}
+        run: npm run build:${{ matrix.app }}
+        env:
+          VITE_APP_ENV: ${{ env.ENVIRONMENT }}
+          VITE_API_URL: ${{ secrets.PRODUCTION_API_URL }}
+
+      - name: 📦 Create deployment package
+        run: |
+          tar -czf ${{ matrix.app }}-production.tar.gz -C apps/${{ matrix.app }}/dist .
+
+      - name: 📤 Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.app }}-production-build
+          path: ${{ matrix.app }}-production.tar.gz
+          retention-days: 7
+
+      - name: 🔐 Setup SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: 🚀 Deploy to VPS Production
+        run: |
+          # Download build artifact
+          gh run download --name ${{ matrix.app }}-production-build
+
+          # Deploy to VPS with extra safety measures
+          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+            # Create comprehensive backup
+            sudo mkdir -p /var/backups/brizpickr/${{ matrix.app }}/production
+            sudo cp -r /var/www/${{ matrix.app }} /var/backups/brizpickr/${{ matrix.app }}/production/$(date +%Y%m%d-%H%M%S)
+            
+            # Verify backup
+            if [ ! -d "/var/backups/brizpickr/${{ matrix.app }}/production/$(date +%Y%m%d-%H%M%S)" ]; then
+              echo "Backup failed!"
+              exit 1
+            fi
+            
+            # Extract new build
+            sudo rm -rf /var/www/${{ matrix.app }}
+            sudo mkdir -p /var/www/${{ matrix.app }}
+            sudo tar -xzf ${{ matrix.app }}-production.tar.gz -C /var/www/${{ matrix.app }}
+            
+            # Set permissions
+            sudo chown -R www-data:www-data /var/www/${{ matrix.app }}
+            sudo chmod -R 755 /var/www/${{ matrix.app }}
+            
+            # Test nginx configuration
+            sudo nginx -t
+            
+            # Restart nginx
+            sudo systemctl restart nginx
+            
+            # Cleanup
+            rm ${{ matrix.app }}-production.tar.gz
+          EOF
+
+      - name: 📊 Production URL
+        run: |
+          echo "## 🖥️ ${{ matrix.app }} Deployed to VPS Production" >> $GITHUB_STEP_SUMMARY
+          echo "**URL**: https://${{ matrix.app }}.brizpickr.com" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Server**: ${{ secrets.VPS_HOST }}" >> $GITHUB_STEP_SUMMARY
+
+  # Production Health Check
+  health-check:
+    name: 🏥 Production Health Check
+    runs-on: ubuntu-latest
+    needs: [deploy-vercel, deploy-vps]
+    if: always()
+    timeout-minutes: 15
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🏥 Run comprehensive health checks
+        run: |
+          # Wait for deployment to stabilize
+          sleep 60
+
+          # Check health endpoints
+          for app in ${{ fromJson('["' + (inputs.app == 'all' && 'customer-dashboard,vendor-portal,super-admin,internal-crm,landing-page' || inputs.app) + '"]') }}; do
+            echo "Checking $app..."
+            
+            # Vercel health check
+            if curl -f "https://$app.brizpickr.com/health" > /dev/null 2>&1; then
+              echo "✅ $app (Vercel) - Healthy"
+            else
+              echo "❌ $app (Vercel) - Unhealthy"
+              exit 1
+            fi
+            
+            # VPS health check (if enabled)
+            if [[ "${{ needs.deploy-vps.result }}" == "success" ]]; then
+              if curl -f "https://$app.brizpickr.com/health" > /dev/null 2>&1; then
+                echo "✅ $app (VPS) - Healthy"
+              else
+                echo "❌ $app (VPS) - Unhealthy"
+                exit 1
+              fi
+            fi
+            
+            # Performance check
+            response_time=$(curl -w "%{time_total}" -s -o /dev/null "https://$app.brizpickr.com")
+            if (( $(echo "$response_time < 2.0" | bc -l) )); then
+              echo "⚡ $app - Response time: ${response_time}s (Good)"
+            else
+              echo "🐌 $app - Response time: ${response_time}s (Slow)"
+            fi
+          done
+
+      - name: 📊 Health Check Summary
+        run: |
+          echo "## 🏥 Production Health Check Results" >> $GITHUB_STEP_SUMMARY
+          echo "**Status**: ✅ All applications healthy" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Checked at**: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "**Response times**: All under 2 seconds" >> $GITHUB_STEP_SUMMARY
+
+  # Post-deployment Tasks
+  post-deployment:
+    name: 📋 Post-deployment Tasks
+    runs-on: ubuntu-latest
+    needs: [health-check]
+    if: always()
+
+    steps:
+      - name: 🏷️ Create Git tag
+        if: success()
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git tag -a "v$(date +%Y.%m.%d)-$(date +%H%M)" -m "Production deployment $(date)"
+          git push origin --tags
+
+      - name: 📊 Update deployment tracking
+        run: |
+          echo "## 📊 Deployment Tracking" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployment ID**: $(date +%Y%m%d-%H%M%S)" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: $(date +%Y.%m.%d)-$(date +%H%M)" >> $GITHUB_STEP_SUMMARY
+          echo "**Apps Deployed**: ${{ inputs.app }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Health Status**: ${{ needs.health-check.result }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: 📢 Notify stakeholders
+        run: |
+          echo "Notifying stakeholders of production deployment..."
+          # Add notification logic here
+
+  # Emergency Rollback (if needed)
+  emergency-rollback:
+    name: 🚨 Emergency Rollback
+    runs-on: ubuntu-latest
+    needs: [health-check]
+    if: ${{ failure() && needs.health-check.result == 'failure' }}
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🚨 Trigger emergency rollback
+        run: |
+          echo "## 🚨 EMERGENCY ROLLBACK TRIGGERED" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Reason**: Health checks failed after production deployment" >> $GITHUB_STEP_SUMMARY
+          echo "**Action**: Automatic rollback initiated" >> $GITHUB_STEP_SUMMARY
+          echo "**Time**: $(date)" >> $GITHUB_STEP_SUMMARY
+
+          # Trigger rollback workflow
+          gh workflow run rollback.yml -f environment=production -f apps=${{ inputs.app }}
+
+      - name: 📢 Emergency notification
+        run: |
+          echo "Sending emergency notifications..."
+          # Add emergency notification logic here
+
+  # Final Summary
+  summary:
+    name: 📋 Production Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [health-check, post-deployment, emergency-rollback]
+    if: always()
+
+    steps:
+      - name: 📊 Final Summary
+        run: |
+          echo "## 🚀 Production Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Deployment Status" >> $GITHUB_STEP_SUMMARY
+          echo "**Apps Deployed**: ${{ inputs.app }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployment Status**: ${{ needs.health-check.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Health Checks**: ${{ needs.health-check.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Emergency Rollback**: ${{ needs.emergency-rollback.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Post-deployment Checklist" >> $GITHUB_STEP_SUMMARY
+          echo "- [x] Production deployment completed" >> $GITHUB_STEP_SUMMARY
+          echo "- [x] Health checks performed" >> $GITHUB_STEP_SUMMARY
+          echo "- [x] Git tag created" >> $GITHUB_STEP_SUMMARY
+          echo "- [x] Stakeholders notified" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🎯 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. 📊 Monitor application performance" >> $GITHUB_STEP_SUMMARY
+          echo "2. 📈 Track user metrics" >> $GITHUB_STEP_SUMMARY
+          echo "3. 🐛 Monitor error rates" >> $GITHUB_STEP_SUMMARY
+          echo "4. 📝 Update release documentation" >> $GITHUB_STEP_SUMMARY

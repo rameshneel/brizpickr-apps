@@ -82,4 +82,107 @@ storybook-static
 
 # Temporary folders
 tmp/
-temp/ 
+temp/
+
+# Testing
+test-results/
+playwright-report/
+playwright/.cache/
+e2e-results/
+cypress/videos/
+cypress/screenshots/
+
+# Vite
+.vite/
+
+# TypeScript
+*.tsbuildinfo
+
+# Turbo
+.turbo/
+
+# Local development
+.local/
+.localhost/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Lock files (uncomment if you want to ignore them)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Generated files
+auto-imports.d.ts
+components.d.ts
+
+# Sentry
+.sentryclirc
+
+# Vercel
+.vercel
+
+# Netlify
+.netlify
+
+# Railway
+.railway
+
+# Docker
+.dockerignore
+
+# Local SSL certificates
+*.pem
+*.key
+*.crt
+
+# Editor config
+.editorconfig
+
+# Prettier
+.prettierignore
+
+# Husky
+.husky/
+
+# Lint staged
+.lint-staged.js
+
+# Bundle analyzer
+bundle-analyzer-report.html
+
+# Performance
+lighthouse-report.json
+lighthouse-report.html
+
+# Screenshots and recordings
+screenshots/
+recordings/
+*.mp4
+*.webm
+
+# Local configuration overrides
+config.local.js
+config.local.json
+
+# Feature flags
+feature-flags.json
+
+# API documentation
+api-docs/
+
+# Local database dumps
+*.dump
+*.sql
+
+# Local secrets
+secrets.json
+secrets.yaml 
